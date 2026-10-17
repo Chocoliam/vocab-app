@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>全能背单词</title>
 <style>
-  body{font-family:system-ui,sans-serif;margin:0;background:#f5f5f7;color:#222}
+  body{font-family:system-ui,-apple-system,sans-serif;margin:0;background:#f5f5f7;color:#222}
   #app{max-width:720px;margin:0 auto;padding:16px;padding-bottom:50px;}
   .top-controls{display:flex;gap:10px;margin-bottom:16px;}
   .deck-selector{flex:1; padding:10px; font-size:16px; border-radius:10px; background:#fff; border:1px solid #ccc; outline:none;}
@@ -56,7 +56,7 @@
 <input type="file" id="fileInput" accept=".json,.csv,.txt" style="display:none" onchange="handleFileImport(event)">
 
 <script>
-const KEY = 'my_vocab_apk_v9';
+const KEY = 'my_vocab_apk_v10';
 let decks = JSON.parse(localStorage.getItem(KEY) || 'null');
 let currentDeckIndex = 0;
 let currentWordIndex = null;
@@ -71,33 +71,55 @@ function badgeClass(n) {
 }
 
 function playAudio(word, type) {
+  // 有道发音接口，国内直连
   const audioUrl = `https://dict.youdao.com/dictvoice?audio=${encodeURIComponent(word)}&type=${type}`;
   const player = document.getElementById('audioPlayer');
   player.src = audioUrl;
   player.play().catch(e => alert("请检查网络连接"));
 }
 
+// 接入国内有道词典接口（无需翻墙）
 async function fetchOnlineDict(word) {
   const container = document.getElementById('onlineDictContainer');
   if(!container) return;
-  container.innerHTML = '<div class="loading">⏳ 正在从在线词典获取详尽释义与例句...</div>';
+  container.innerHTML = '<div class="loading">⏳ 正在从国内有道词典获取详尽释义与例句...</div>';
+  
   try {
-    const res = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`);
-    if (!res.ok) throw new Error("未找到在线释义");
+    // 有道词典的国内公开 JSON 接口
+    const res = await fetch(`https://dict.youdao.com/jsonapi?q=${encodeURIComponent(word)}`);
+    if (!res.ok) throw new Error("网络请求失败");
     const data = await res.json();
+    
     let html = '';
-    data[0].meanings.forEach((meaning, index) => {
-      html += `<details ${index===0?'open':''}><summary>${meaning.partOfSpeech} (词性)</summary><div class="dict-content">`;
-      meaning.definitions.forEach((def, i) => {
-        html += `<p><strong>${i+1}.</strong> ${def.definition}`;
-        if(def.example) html += `<br><span style="color:#666; font-style:italic;">例句: ${def.example}</span>`;
-        html += `</p >`;
+    
+    // 提取柯林斯/牛津星级释义
+    if (data.collins && data.collins.collins_entries) {
+      data.collins.collins_entries.forEach(entry => {
+        html += `<details open><summary>👑 柯林斯高阶词典</summary><div class="dict-content">`;
+        entry.entries.forEach(e => {
+          html += `<p><strong>${e.entry.tran_entry}</strong></p >`;
+        });
+        html += `</div></details>`;
+      });
+    }
+    
+    // 提取双语例句
+    if (data.blng && data.blng.sentences) {
+      html += `<details><summary>📖 双语权威例句</summary><div class="dict-content">`;
+      data.blng.sentences.forEach(s => {
+        html += `<p>${s.sentence.en} <br><span style="color:#666; font-style:italic;">${s.sentence.zh}</span></p >`;
       });
       html += `</div></details>`;
-    });
+    }
+    
+    // 如果啥都没提取到
+    if(!html) {
+      html = '<div class="loading" style="color:#ff3b30;">暂无在线详细释义（可能该词无详细扩展或网络超时）</div>';
+    }
+    
     container.innerHTML = html;
   } catch (err) {
-    container.innerHTML = '<div class="loading" style="color:#ff3b30;">暂无在线详细释义（请检查网络或该词可能为生僻词组）</div>';
+    container.innerHTML = '<div class="loading" style="color:#ff3b30;">暂无在线详细释义（请检查网络）</div>';
   }
 }
 
@@ -108,7 +130,7 @@ function renderList(filter = '') {
       <h2 style="color:#333;">欢迎使用全能背单词</h2>
       <p style="color:#666; margin-bottom:30px;">内置词典级解析，支持多词库管理。</p >
       <button class="btn-action" style="padding:15px 30px; font-size:18px; width:80%;" onclick="downloadFullVocab()">
-        ${isDownloading ? '⏳ 正在下载 5500 考研词...' : '⬇️ 下载全量考研词库'}
+        ${isDownloading ? '⏳ 正在国内高速下载考研词...' : '⬇️ 下载全量考研词库'}
       </button>
       <br><br>
       <button class="btn-gray" style="width:80%;" onclick="createEmptyDeck()">或者，新建一个空词库</button>
@@ -190,19 +212,37 @@ function changeMark(d) { const w = getCurrentDeck().words[currentWordIndex]; w.m
 function changeDeck(idx) { currentDeckIndex = parseInt(idx); renderList(); }
 function deleteWord() { if(confirm("确定删除此词？")) { getCurrentDeck().words.splice(currentWordIndex, 1); save(); renderList(currentSearchText); } }
 
+// 国内 Gitee 镜像下载，不用翻墙！
 async function downloadFullVocab() {
   if(isDownloading) return; isDownloading = true; renderList();
-  try {
-    const res = await fetch('https://cdn.jsdelivr.net/gh/KyleBing/english-vocabulary@master/json/3-考研-顺序.json');
-    const data = await res.json();
-    const formatted = data.map(item => ({
-      word: item.word, type: item.word.includes(' ') ? 'phrase' : 'word',
-      phonetic_uk: item.phonetic || '', phonetic_us: item.phonetic || '',
-      markCount: 0, notes: '', dicts: [{ name: '考研大纲释义', content: item.translations.map(t => t.tranCn).join('；') }]
-    }));
-    decks = [{ id: 'deck_full', name: '考研核心全量词库', words: formatted }];
-    save(); currentDeckIndex = 0; alert(`成功导入 ${formatted.length} 个考研单词！`);
-  } catch (e) { alert("下载失败：" + e.message); }
+  
+  const urls = [
+    'https://gitee.com/hycool/english-vocabulary/raw/master/json/3-考研-顺序.json',
+    'https://fastly.jsdelivr.net/gh/KyleBing/english-vocabulary@master/json/3-考研-顺序.json'
+  ];
+  
+  let data = null;
+  for (let url of urls) {
+    try {
+      const res = await fetch(url);
+      if (res.ok) { data = await res.json(); break; }
+    } catch (e) { console.log("节点尝试失败"); }
+  }
+
+  if (data) {
+    try {
+      const formatted = data.map(item => ({
+        word: item.word, type: item.word.includes(' ') ? 'phrase' : 'word',
+        phonetic_uk: item.phonetic || '', phonetic_us: item.phonetic || '',
+        markCount: 0, notes: '', dicts: [{ name: '考研大纲释义', content: item.translations.map(t => t.tranCn).join('；') }]
+      }));
+      decks = [{ id: 'deck_full', name: '考研核心全量词库', words: formatted }];
+      save(); currentDeckIndex = 0; alert(`成功导入 ${formatted.length} 个考研单词！`);
+    } catch (e) { alert("数据解析失败"); }
+  } else {
+    alert("下载失败，请检查网络连接。");
+  }
+  
   isDownloading = false; renderList();
 }
 
