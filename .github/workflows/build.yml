@@ -33,6 +33,19 @@ jobs:
           npx cap init "考研背单词" "com.my.vocab" --web-dir=www
           npx cap add android
           npx cap sync
+          
+          # 自动注入防冲突代码
+          cat << 'EOF' >> android/build.gradle
+          
+          allprojects {
+              configurations.all {
+                  resolutionStrategy {
+                      force 'org.jetbrains.kotlin:kotlin-stdlib:1.8.22'
+                      force 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.8.22'
+                  }
+              }
+          }
+          EOF
 
       - name: Build with Gradle
         run: |
