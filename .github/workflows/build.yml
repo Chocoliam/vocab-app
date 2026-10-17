@@ -1,278 +1,59 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>全能背单词</title>
-<style>
-  body{font-family:system-ui,-apple-system,sans-serif;margin:0;background:#f5f5f7;color:#222}
-  #app{max-width:720px;margin:0 auto;padding:16px;padding-bottom:50px;}
-  .top-controls{display:flex;gap:10px;margin-bottom:16px;}
-  .deck-selector{flex:1; padding:10px; font-size:16px; border-radius:10px; background:#fff; border:1px solid #ccc; outline:none;}
-  .search-bar{width:100%;box-sizing:border-box;padding:12px;font-size:15px;border-radius:12px;margin-bottom:16px;border:1px solid #ccc;outline:none;}
-  .item{background:#fff;border-radius:14px;padding:14px;margin-bottom:10px;box-shadow:0 2px 8px rgba(0,0,0,.06);cursor:pointer}
-  .top-line{display:flex;align-items:center;gap:8px;}
-  .word{font-size:18px;font-weight:600}
-  .def{color:#555;font-size:14px;margin-top:6px;line-height:1.4;}
-  .type{font-size:12px;color:#666;background:#eee;border-radius:999px;padding:2px 8px;margin-right:6px}
-  .badge{border-radius:999px;padding:4px 10px;font-size:14px;font-weight:600;}
-  .badge.gray{background:#e5e5ea;color:#555} .badge.yellow{background:#fff3b0;color:#8a6d00}
-  .badge.orange{background:#ffd6a5;color:#9a4a00} .badge.red{background:#ffb3b3;color:#a10000}
-  
-  .detail{background:#fff;border-radius:14px;padding:20px;box-shadow:0 2px 8px rgba(0,0,0,.06)}
-  button{border:0;border-radius:12px;padding:10px 14px;font-size:15px;background:#007aff;color:#fff;cursor:pointer}
-  .btn-gray{background:#8e8e93;} .btn-action{background:#34c759;} .btn-danger{background:#ff3b30;}
-  
-  .detail-header{display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:8px;}
-  .detail-header h2{font-size:28px;margin:0;font-weight:700;}
-  .detail-header .badge{font-size:20px;padding:4px 14px;}
-  .detail-header .btn-group{display:flex;gap:8px;}
-  .detail-header .btn-group button{padding:8px 16px;font-size:16px;border-radius:8px;}
+name: Build APK
+on: [push, workflow_dispatch]
 
-  .phonetics{display:flex;gap:16px;margin:12px 0;padding-bottom:16px;border-bottom:1px solid #eee;}
-  .pronounce-btn{background:#e5e5ea;color:#333;padding:6px 12px;font-size:14px;border-radius:8px;}
-  
-  details {margin-top: 12px; background: #f9f9fb; border-radius: 10px; border: 1px solid #e5e5ea; overflow:hidden;}
-  details[open] {background: #fff;}
-  summary {padding: 12px 16px; font-weight: 600; cursor: pointer; font-size: 15px; display:flex; justify-content:space-between;}
-  summary::-webkit-details-marker {display:none;}
-  summary::after {content:'➕'; color:#999; font-size:12px;}
-  details[open] summary::after {content:'➖';}
-  .dict-content {padding: 16px; font-size: 15px; line-height: 1.6; border-top:1px solid #eee;}
-  .dict-content p {margin: 8px 0;}
-  
-  .notes-section {margin-top: 24px; background: #fffbeb; border-radius: 10px; padding: 16px; border: 1px solid #fde68a;}
-  .notes-section label {font-weight: 600; font-size: 15px; display: block; margin-bottom: 8px; color: #92400e;}
-  textarea {width: 100%; box-sizing: border-box; min-height: 100px; padding: 12px; font-size: 15px; border-radius: 8px; border: 1px solid #fcd34d; outline:none; resize:vertical; font-family:inherit;}
-  
-  .footer{margin-top:20px; display:flex; gap:10px;}
-  .footer button {flex: 1;}
-  .loading {color: #007aff; font-weight: bold; font-size: 14px; padding: 10px;}
-</style>
-</head>
-<body>
-<div id="app"></div>
-<audio id="audioPlayer" style="display:none;"></audio>
-<input type="file" id="fileInput" accept=".json,.csv,.txt" style="display:none" onchange="handleFileImport(event)">
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v4
 
-<script>
-const KEY = 'my_vocab_apk_v10';
-let decks = JSON.parse(localStorage.getItem(KEY) || 'null');
-let currentDeckIndex = 0;
-let currentWordIndex = null;
-let currentSearchText = '';
-let isDownloading = false;
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
 
-function save() { localStorage.setItem(KEY, JSON.stringify(decks)); }
-function getCurrentDeck() { return decks ? decks[currentDeckIndex] : null; }
+      - name: Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '21'
 
-function badgeClass(n) {
-  if (n >= 7) return 'badge red'; if (n >= 4) return 'badge orange'; if (n >= 1) return 'badge yellow'; return 'badge gray';
-}
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools'
 
-function playAudio(word, type) {
-  // 有道发音接口，国内直连
-  const audioUrl = `https://dict.youdao.com/dictvoice?audio=${encodeURIComponent(word)}&type=${type}`;
-  const player = document.getElementById('audioPlayer');
-  player.src = audioUrl;
-  player.play().catch(e => alert("请检查网络连接"));
-}
+      - name: Prepare and Sync
+        run: |
+          mkdir www
+          cp index.html www/
+          npm init -y
+          npm install @capacitor/core @capacitor/cli @capacitor/android
+          npx cap init "考研背单词" "com.my.vocab" --web-dir=www
+          npx cap add android
+          npx cap sync
+          
+          cat << 'EOF' >> android/build.gradle
+          
+          allprojects {
+              configurations.all {
+                  resolutionStrategy {
+                      force 'org.jetbrains.kotlin:kotlin-stdlib:1.8.22'
+                      force 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.8.22'
+                  }
+              }
+          }
+          EOF
 
-// 接入国内有道词典接口（无需翻墙）
-async function fetchOnlineDict(word) {
-  const container = document.getElementById('onlineDictContainer');
-  if(!container) return;
-  container.innerHTML = '<div class="loading">⏳ 正在从国内有道词典获取详尽释义与例句...</div>';
-  
-  try {
-    // 有道词典的国内公开 JSON 接口
-    const res = await fetch(`https://dict.youdao.com/jsonapi?q=${encodeURIComponent(word)}`);
-    if (!res.ok) throw new Error("网络请求失败");
-    const data = await res.json();
-    
-    let html = '';
-    
-    // 提取柯林斯/牛津星级释义
-    if (data.collins && data.collins.collins_entries) {
-      data.collins.collins_entries.forEach(entry => {
-        html += `<details open><summary>👑 柯林斯高阶词典</summary><div class="dict-content">`;
-        entry.entries.forEach(e => {
-          html += `<p><strong>${e.entry.tran_entry}</strong></p >`;
-        });
-        html += `</div></details>`;
-      });
-    }
-    
-    // 提取双语例句
-    if (data.blng && data.blng.sentences) {
-      html += `<details><summary>📖 双语权威例句</summary><div class="dict-content">`;
-      data.blng.sentences.forEach(s => {
-        html += `<p>${s.sentence.en} <br><span style="color:#666; font-style:italic;">${s.sentence.zh}</span></p >`;
-      });
-      html += `</div></details>`;
-    }
-    
-    // 如果啥都没提取到
-    if(!html) {
-      html = '<div class="loading" style="color:#ff3b30;">暂无在线详细释义（可能该词无详细扩展或网络超时）</div>';
-    }
-    
-    container.innerHTML = html;
-  } catch (err) {
-    container.innerHTML = '<div class="loading" style="color:#ff3b30;">暂无在线详细释义（请检查网络）</div>';
-  }
-}
+      - name: Build with Gradle
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
 
-function renderList(filter = '') {
-  currentWordIndex = null; currentSearchText = filter;
-  if (!decks) {
-    document.getElementById('app').innerHTML = `<div style="text-align:center; padding-top:100px;">
-      <h2 style="color:#333;">欢迎使用全能背单词</h2>
-      <p style="color:#666; margin-bottom:30px;">内置词典级解析，支持多词库管理。</p >
-      <button class="btn-action" style="padding:15px 30px; font-size:18px; width:80%;" onclick="downloadFullVocab()">
-        ${isDownloading ? '⏳ 正在国内高速下载考研词...' : '⬇️ 下载全量考研词库'}
-      </button>
-      <br><br>
-      <button class="btn-gray" style="width:80%;" onclick="createEmptyDeck()">或者，新建一个空词库</button>
-    </div>`;
-    return;
-  }
-
-  const deck = getCurrentDeck();
-  let optionsHtml = '';
-  decks.forEach((d, index) => optionsHtml += `<option value="${index}" ${index === currentDeckIndex ? 'selected' : ''}>${d.name} (${d.words.length}词)</option>`);
-
-  let html = `<div class="top-controls">
-    <select class="deck-selector" onchange="changeDeck(this.value)">${optionsHtml}</select>
-    <button class="btn-gray" onclick="createEmptyDeck()">新建库</button>
-  </div>
-  <input type="text" class="search-bar" placeholder="🔍 搜索词库..." value="${filter}" oninput="renderList(this.value)">
-  <div class="list">`;
-  
-  const filteredData = deck.words.filter(item => item.word.toLowerCase().includes(filter.toLowerCase())).slice(0, 150);
-  if (filteredData.length === 0) html += `<p style="text-align:center; color:#999;">暂无词汇</p >`;
-
-  filteredData.forEach((item) => {
-    const realIndex = deck.words.indexOf(item);
-    const noteIcon = item.notes && item.notes.trim() !== '' ? ' 📝' : '';
-    html += `<div class="item" onclick="openDetail(${realIndex})">
-      <div class="top-line"><span class="word">${item.word}${noteIcon}</span><span class="${badgeClass(item.markCount)}">${item.markCount}</span></div>
-      <div class="def"><span class="type">${item.type === 'phrase' ? '词组' : '单词'}</span>${item.dicts[0].content.substring(0, 40)}</div>
-    </div>`;
-  });
-  
-  html += `</div>
-  <div class="footer">
-    <button class="btn-action" onclick="showAddWord()">+ 添加</button>
-    <button class="btn-gray" onclick="document.getElementById('fileInput').click()">导入文件</button>
-    <button class="btn-gray" onclick="exportData()">导出备份</button>
-  </div>`;
-  document.getElementById('app').innerHTML = html;
-}
-
-function openDetail(i) {
-  currentWordIndex = i;
-  const item = getCurrentDeck().words[i];
-  let phoneticHtml = item.type === 'word' ? `<div class="phonetics">
-    <div><span>英 ${item.phonetic_uk || ''}</span> <button class="pronounce-btn" onclick="playAudio('${item.word}', 1)">🔊 发音</button></div>
-    <div><span>美 ${item.phonetic_us || ''}</span> <button class="pronounce-btn" onclick="playAudio('${item.word}', 2)">🔊 发音</button></div>
-  </div>` : '';
-
-  let localDicts = item.dicts.map(d => `<details><summary>${d.name}</summary><div class="dict-content">${d.content}</div></details>`).join('');
-  const hasNotes = item.notes && item.notes.trim() !== '';
-  const notesHtml = `<div class="notes-section"><label>✍️ 我的笔记</label><textarea oninput="saveNote(this.value)" placeholder="自动保存...">${item.notes || ''}</textarea></div>`;
-
-  document.getElementById('app').innerHTML = `<button class="btn-gray" style="margin-bottom:16px" onclick="renderList('${currentSearchText}')">← 返回列表</button>
-  <div class="detail-header">
-    <h2>${item.word}</h2><span class="${badgeClass(item.markCount)}">${item.markCount}</span>
-    <div class="btn-group">
-      <button onclick="changeMark(1)">+1</button><button class="btn-gray" onclick="changeMark(-1)">-1</button>
-    </div>
-  </div>
-  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-    <p style="font-size:14px; color:#777; margin:0;">属于 [${getCurrentDeck().name}]</p >
-    <button class="btn-danger" style="padding:6px 12px; font-size:13px;" onclick="deleteWord()">删除</button>
-  </div>
-  
-  <div class="detail">
-    ${hasNotes ? notesHtml : ''}
-    ${phoneticHtml}
-    <div style="margin-top:16px;">
-      ${localDicts}
-      <div id="onlineDictContainer"></div>
-    </div>
-    ${!hasNotes ? notesHtml : ''}
-  </div>`;
-
-  if(item.type === 'word') fetchOnlineDict(item.word);
-}
-
-function saveNote(text) { getCurrentDeck().words[currentWordIndex].notes = text; save(); }
-function changeMark(d) { const w = getCurrentDeck().words[currentWordIndex]; w.markCount = Math.max(0, w.markCount + d); save(); openDetail(currentWordIndex); }
-function changeDeck(idx) { currentDeckIndex = parseInt(idx); renderList(); }
-function deleteWord() { if(confirm("确定删除此词？")) { getCurrentDeck().words.splice(currentWordIndex, 1); save(); renderList(currentSearchText); } }
-
-// 国内 Gitee 镜像下载，不用翻墙！
-async function downloadFullVocab() {
-  if(isDownloading) return; isDownloading = true; renderList();
-  
-  const urls = [
-    'https://gitee.com/hycool/english-vocabulary/raw/master/json/3-考研-顺序.json',
-    'https://fastly.jsdelivr.net/gh/KyleBing/english-vocabulary@master/json/3-考研-顺序.json'
-  ];
-  
-  let data = null;
-  for (let url of urls) {
-    try {
-      const res = await fetch(url);
-      if (res.ok) { data = await res.json(); break; }
-    } catch (e) { console.log("节点尝试失败"); }
-  }
-
-  if (data) {
-    try {
-      const formatted = data.map(item => ({
-        word: item.word, type: item.word.includes(' ') ? 'phrase' : 'word',
-        phonetic_uk: item.phonetic || '', phonetic_us: item.phonetic || '',
-        markCount: 0, notes: '', dicts: [{ name: '考研大纲释义', content: item.translations.map(t => t.tranCn).join('；') }]
-      }));
-      decks = [{ id: 'deck_full', name: '考研核心全量词库', words: formatted }];
-      save(); currentDeckIndex = 0; alert(`成功导入 ${formatted.length} 个考研单词！`);
-    } catch (e) { alert("数据解析失败"); }
-  } else {
-    alert("下载失败，请检查网络连接。");
-  }
-  
-  isDownloading = false; renderList();
-}
-
-function createEmptyDeck() { const name = prompt("输入新词库名称："); if(name) { if(!decks) decks = []; decks.push({ id: 'deck_'+Date.now(), name: name, words: [] }); save(); changeDeck(decks.length-1); } }
-function showAddWord() { const w = prompt("输入单词或词组："); if(!w) return; const d = prompt("输入中文释义："); if(!d) return; getCurrentDeck().words.unshift({ word: w, type: w.includes(' ')?'phrase':'word', phonetic_uk:'', phonetic_us:'', markCount:0, notes:'', dicts:[{ name: '自定义', content: d }] }); save(); renderList(currentSearchText); }
-function exportData() { const a = document.createElement('a'); a.href = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(decks)); a.download = "vocab_backup.json"; a.click(); }
-
-function handleFileImport(e) {
-  const file = e.target.files[0]; if(!file) return;
-  const reader = new FileReader();
-  reader.onload = function(ev) {
-    try {
-      if (file.name.endsWith('.json')) {
-        const p = JSON.parse(ev.target.result);
-        if(Array.isArray(p) && p[0] && p[0].words) { decks = p; save(); changeDeck(0); alert("备份恢复成功"); }
-      } else {
-        const lines = ev.target.result.split('\n'); let newWords = [];
-        lines.forEach(l => {
-          const pts = l.trim().split(/,|\t/);
-          if(pts.length >= 2) newWords.push({ word: pts[0].trim(), type: pts[0].includes(' ')?'phrase':'word', phonetic_uk:'', phonetic_us:'', markCount:0, notes:'', dicts:[{name:'导入', content:pts.slice(1).join(',').trim()}] });
-        });
-        if(newWords.length) { decks.push({ id: 'deck_'+Date.now(), name: file.name, words: newWords }); save(); changeDeck(decks.length-1); alert(`导入 ${newWords.length} 个词`); }
-      }
-    } catch(err) { alert("解析失败"); }
-    e.target.value = '';
-  };
-  reader.readAsText(file);
-}
-
-renderList();
-</script>
-</body>
-</html>
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: MyVocab-APK
+          path: android/app/build/outputs/apk/debug/app-debug.apk
